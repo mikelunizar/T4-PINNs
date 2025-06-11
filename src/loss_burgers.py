@@ -4,7 +4,7 @@ mu, mass, k = 15, 5, 400  # μ (mu),  m (mass), k (oscillator constant)
 nu = 0.025
 
 
-def loss_pde(X_cp, solver):
+def loss_pde(X_cp, model):
     # Ensure t requires gradient computation
     x = X_cp[:, 0:1]
     t = X_cp[:, 1:]
@@ -14,7 +14,7 @@ def loss_pde(X_cp, solver):
     with torch.set_grad_enabled(True):
         x_cp_grad = torch.cat([x, t], dim=-1)
         # Compute the neural network output u(t)
-        u_hat = solver(x_cp_grad)
+        u_hat = model.forward(x_cp_grad)
         # Compute the derivative of u with respect to t
         du_dt = torch.autograd.grad(u_hat, t, grad_outputs=torch.ones_like(t), create_graph=True)[0]
         dx_dx = torch.autograd.grad(u_hat, x, grad_outputs=torch.ones_like(x), create_graph=True)[0]
@@ -25,23 +25,23 @@ def loss_pde(X_cp, solver):
     return loss_pde_
 
 
-def loss_ic(X_ic, u_ic, solver):
-    u_ic_hat = solver(X_ic)
+def loss_ic(X_ic, u_ic, model):
+    u_ic_hat = model.forward(X_ic)
     loss_ic_ = torch.mean((u_ic - u_ic_hat)**2)
     return loss_ic_
 
 
-def loss_bc(X_bc, u_bc, solver):
-    u_bc_hat = solver(X_bc)
+def loss_bc(X_bc, u_bc, model):
+    u_bc_hat = model.forward(X_bc)
     loss_ic_ = torch.mean((u_bc_hat - u_bc)**2)
     return loss_ic_
 
 
-def loss_pinn(X_cp, X_bc, u_bc, X_ic, u_ic, solver):
+def loss_pinn(X_cp, X_bc, u_bc, X_ic, u_ic, model):
 
-    loss_pde_ = loss_pde(X_cp, solver)
-    loss_bc_ = loss_bc(X_bc, u_bc, solver)
-    loss_ic_ = loss_ic(X_ic, u_ic, solver)
+    loss_pde_ = loss_pde(X_cp, model)
+    loss_bc_ = loss_bc(X_bc, u_bc, model)
+    loss_ic_ = loss_ic(X_ic, u_ic, model)
 
     loss = loss_pde_ + loss_bc_ + loss_ic_
 

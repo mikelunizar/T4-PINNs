@@ -86,7 +86,7 @@ if __name__ == '__main__':
     analytical_solution = generate_solution_osc(
         analytical_time)  # Calculating the corresponding y-values using the oscillator function
 
-    predicted_solution, error = inference_model_and_performance(model, analytical_time, analytical_solution)
+    predicted_solution, error = inference_model_and_performance(model, analytical_time, analytical_solution,)
 
     # Plot the exact solution and training points
     plt.figure(figsize=(10, 6))
