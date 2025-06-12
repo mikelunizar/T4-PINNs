@@ -51,11 +51,9 @@ class Solver(pl.LightningModule):
 
     def test_step(self, batch, batch_id):
         x_cp, target = batch[0], batch[1]
-        prediction = self.model(x_cp.clone().detach())
+        prediction = self.forward(x_cp.clone().detach())
         rmse = torch.sqrt(torch.mean((prediction-target)**2)).detach().item()
         self.test_error = rmse
-        print(f'RMSE error HQ solution: {rmse}')
-        self.log('test error HQ', rmse)
 
     def on_test_epoch_end(self):
         print(f'RMSE error HQ solution: {self.test_error}')
