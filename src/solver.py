@@ -64,7 +64,7 @@ class Solver(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = self.optimizer(self.parameters(), lr=self.lr)
         lr_scheduler = {
-            'scheduler': torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=1e-5),
+            'scheduler': torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=self.lr/100),
             'monitor': 'train_loss'}
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler}
         #return {'optimizer': optimizer,}
