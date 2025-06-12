@@ -1,0 +1,19 @@
+# sweep.yaml
+program: sweep.py
+method: random       # or "random" or "grid"
+metric:
+  name: val_loss    # your target metric to optimize
+  goal: minimize    # or "maximize"
+parameters:
+  bs:
+    values: [16, 32, 64, 128]  # discrete batch size options
+  lr:
+    distribution: log_uniform
+    min: -6  # for 10^-6 = 0.000001
+    max: -2  # for 10^-3 = 0.001
+  with_enc:
+    values: [True, False]  # Positional Encoder or not
+  ratio:
+    values: [0.01, 0.1, 0.25, 0.5, 0.75, 1.]
+  optimizer:
+    values: [ "adam", "sgd" ]
