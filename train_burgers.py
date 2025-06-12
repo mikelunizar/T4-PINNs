@@ -19,28 +19,29 @@ if __name__ == '__main__':
 
     Nx, Nt = 256, 100
     Nc = 2500
-    epochs = 2000
+    epochs = 200
     ratio = 0.1
     bs = 128
     lr = 1e-2
     with_enc = False
+    opt = torch.optim.SGD
 
+    # Run name
     foldername = f'bs={bs}_lr={lr}_ratio={ratio}_withEnc={with_enc}'
 
+    # Data generation
     train_data, valid_data, points, ic, bc = collocation_points_generation(Nx, Nt, Nc, ratio)
-
     # Build loaders
     train_loader = build_dataloader(train_data[0], train_data[1], batch_size=bs)
     valid_loader = build_dataloader(valid_data[0], valid_data[1], batch_size=bs)
-
     # Instantiate the model
     neural_network = torch.nn.Sequential(torch.nn.Linear(22 if with_enc else 2, 50),
-                                        torch.nn.Tanh(),
-                                        torch.nn.Linear(50, 50),
-                                        torch.nn.Tanh(),
-                                        torch.nn.Linear(50, 50),
-                                        torch.nn.Tanh(),
-                                        torch.nn.Linear(50, 1))
+                                         torch.nn.Tanh(),
+                                         torch.nn.Linear(50, 50),
+                                         torch.nn.Tanh(),
+                                         torch.nn.Linear(50, 50),
+                                         torch.nn.Tanh(),
+                                         torch.nn.Linear(50, 1))
 
     # Regularization techniques
     early_stopping = pl.callbacks.EarlyStopping(monitor='val_loss', patience=10, mode='min')
@@ -49,22 +50,22 @@ if __name__ == '__main__':
     # Model setup
     model = Solver(neural_network, criterion=loss_pinn,
                    X_bc=bc[0], u_bc=bc[1], X_ic=ic[0], u_ic=ic[1], points=points,
-                   lr=lr, optimizer=torch.optim.Adam, with_enc=with_enc)
+                   lr=lr, optimizer=opt, with_enc=with_enc)
     # Trainer setup
     trainer = pl.Trainer(accelerator='gpu' if torch.cuda.is_available() else 'cpu',
                          max_epochs=epochs, logger=WandbLogger(name=foldername, project='T4-PINNs'),
                          callbacks=[early_stopping, save_topk], check_val_every_n_epoch=25)
     # Training the model
     trainer.fit(model, train_loader, valid_loader)
+
     # Load best model and Evaluate
     model.load_state_dict(torch.load(f'outputs/{foldername}/topk1.pth', weights_only=True))
-    # evaluate model wiht target
-    target_high_res = np.load('./data/burgers_sol.npy', allow_pickle=True)[-1]
-    prediction_high_res = model(torch.tensor(points, dtype=torch.float32)).detach().numpy()
-    trainer.log('test_rmse', np.sqrt(np.mean((target_high_res - prediction_high_res) ** 2)), on_epoch=True,
-                on_step=False)
 
-    create_prediction_gif(model.stored_predictions, points, x_cp=train_data[0], output_path=f'outputs/{foldername}/evolution.gif')
+    # evaluate model with target
+    target_high_res = np.load('./data/burgers_sol.npy', allow_pickle=True)[-1]
+    test_loader = build_dataloader(points, target_high_res, batch_size=len(target_high_res), shuffle=False)
+    trainer.test(model, dataloaders=test_loader)
+    #create_prediction_gif(model.stored_predictions, points, x_cp=train_data[0], output_path=f'outputs/{foldername}/evolution.gif')
 
     # INFERENCE SUPER - HIGH RESOLUTION
     Nx, Nt = 1000, 1000
