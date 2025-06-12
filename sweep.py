@@ -13,6 +13,8 @@ import wandb
 np.random.seed(53)
 pl.seed_everything(53)
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 
 def train(config=None):
     # Override default hyperparameters with sweep config if provided
@@ -51,7 +53,7 @@ def train(config=None):
     # Model setup
     model = Solver(neural_network, criterion=loss_pinn,
                    X_bc=bc[0], u_bc=bc[1], X_ic=ic[0], u_ic=ic[1], points=points,
-                   lr=lr, optimizer=opt, with_enc=with_enc)
+                   lr=lr, optimizer=opt, with_enc=with_enc, device=device)
     # Trainer setup
     trainer = pl.Trainer(accelerator='gpu' if torch.cuda.is_available() else 'cpu',
                          max_epochs=epochs, logger=WandbLogger(name=foldername, project='T4-PINNs'),

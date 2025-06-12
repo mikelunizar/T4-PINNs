@@ -9,7 +9,7 @@ class Solver(pl.LightningModule):
         University of Zaragoza, Applied Mechanics Department (AMB)
     """
     def __init__(self, base_model, criterion=None, X_bc=None, u_bc=None, X_ic=None, u_ic=None, points=None,
-                 lr=1e-3, optimizer=torch.optim.Adam, with_enc=False):
+                 lr=1e-3, optimizer=torch.optim.Adam, with_enc=False, device='cpu'):
         super(Solver, self).__init__()
 
         self.model = base_model
@@ -18,12 +18,12 @@ class Solver(pl.LightningModule):
         self.lr = lr
         self.with_enc = with_enc
 
-        self.X_bc = torch.tensor(X_bc, dtype=torch.float32)
-        self.u_bc = torch.tensor(u_bc, dtype=torch.float32)
-        self.X_ic = torch.tensor(X_ic, dtype=torch.float32)
-        self.u_ic = torch.tensor(u_ic, dtype=torch.float32)
+        self.X_bc = torch.tensor(X_bc, dtype=torch.float32).to(device)
+        self.u_bc = torch.tensor(u_bc, dtype=torch.float32).to(device)
+        self.X_ic = torch.tensor(X_ic, dtype=torch.float32).to(device)
+        self.u_ic = torch.tensor(u_ic, dtype=torch.float32).to(device)
 
-        self.points = torch.tensor(points, dtype=torch.float32) if points is not None else points
+        self.points = torch.tensor(points, dtype=torch.float32).to(device) if points is not None else points
         self.stored_predictions = dict()
 
     def forward(self, x):

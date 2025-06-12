@@ -15,6 +15,9 @@ from src.data_generator import collocation_points_generation
 np.random.seed(53)
 pl.seed_everything(53)
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
 if __name__ == '__main__':
 
     Nx, Nt = 256, 100
@@ -50,9 +53,9 @@ if __name__ == '__main__':
     # Model setup
     model = Solver(neural_network, criterion=loss_pinn,
                    X_bc=bc[0], u_bc=bc[1], X_ic=ic[0], u_ic=ic[1], points=points,
-                   lr=lr, optimizer=opt, with_enc=with_enc)
+                   lr=lr, optimizer=opt, with_enc=with_enc, device='mps')
     # Trainer setup
-    trainer = pl.Trainer(accelerator='gpu' if torch.cuda.is_available() else 'cpu',
+    trainer = pl.Trainer(accelerator='gpu' if torch.cuda.is_available() else 'mps',
                          max_epochs=epochs, logger=WandbLogger(name=foldername, project='T4-PINNs'),
                          callbacks=[early_stopping, save_topk], check_val_every_n_epoch=25)
     # Training the model
