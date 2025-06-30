@@ -92,39 +92,52 @@ def plot_collocation_setup(xt_grid, coll_points_train, coll_points_val, xt_bc, u
     plt.show()
 
 
-def visualize_pde_error_domain(residuals, X, T, coll_points_train, coll_points_val):
-    # Avoid log(0) by adding a small epsilon
-    epsilon = 1e-6
-    log_residuals = np.log10(residuals + epsilon)
+def visualize_pde_error_domain(residuals, X, T, coll_points_train, coll_points_val, log=True):
+    """
+    Visualize the PDE residuals over the domain with optional log scaling.
 
+    Parameters:
+    - residuals: 2D numpy array of residual values.
+    - X, T: Meshgrid arrays of x and t.
+    - coll_points_train, coll_points_val: Arrays of collocation points.
+    - log: If True, apply log10 scale to residuals for better visualization.
+    """
     plt.figure(figsize=(8, 5))
 
-    # Plot the log-scaled residual heatmap
-    contour = plt.contourf(X, T, log_residuals, levels=100, cmap='plasma')
+    if log:
+        epsilon = 1e-6
+        residuals_plot = np.log10(residuals + epsilon)
+        levels = 100
+        contour = plt.contourf(X, T, residuals_plot, levels=levels, cmap='plasma')
+        cbar = plt.colorbar(contour)
+        cbar.set_label('Residual (log scale)')
 
-    # Add colorbar with custom tick labels
-    cbar = plt.colorbar(contour)
-    cbar.set_label('Residual')
-
-    # Set ticks (log scale) and format labels as actual residuals
-    log_ticks = np.linspace(np.floor(log_residuals.min()), np.floor(log_residuals.max()), 6)
-    cbar.set_ticks(log_ticks)
-    cbar.set_ticklabels([f"$10^{{{int(t)}}}$" for t in log_ticks])
+        log_ticks = np.linspace(np.floor(residuals_plot.min()), np.floor(residuals_plot.max()), 6)
+        cbar.set_ticks(log_ticks)
+        cbar.set_ticklabels([f"$10^{{{int(t)}}}$" for t in log_ticks])
+        plt.title('Log-Scaled PDE Residual with Collocation Points')
+    else:
+        contour = plt.contourf(X, T, residuals, levels=100, cmap='plasma')
+        cbar = plt.colorbar(contour)
+        cbar.set_label('Residual')
+        plt.title('PDE Residual with Collocation Points')
 
     # Overlay collocation points
-    plt.scatter(coll_points_train[:, 0], coll_points_train[:, 1], color='black', s=15, edgecolors='white', label='Train Collocation', alpha=0.7)
-    plt.scatter(coll_points_val[:, 0], coll_points_val[:, 1], color='orange', edgecolors='white',s=15, label='Val Collocation', alpha=0.7)
+    plt.scatter(coll_points_train[:, 0], coll_points_train[:, 1],
+                color='black', s=15, edgecolors='white', label='Train Collocation', alpha=0.7)
+    plt.scatter(coll_points_val[:, 0], coll_points_val[:, 1],
+                color='orange', edgecolors='white', s=15, label='Val Collocation', alpha=0.7)
 
     plt.xlabel('$x$')
     plt.ylabel('$t$')
-    plt.title('Log-Scaled PDE Residual with Collocation Points')
-    # Dense legend on the right
     plt.legend(
         handlelength=1.5,
         handletextpad=0.5,
         labelspacing=0.3,
         fontsize='medium',
-        framealpha=1.0
+        framealpha=1.0,
+        loc='center left',
+        bbox_to_anchor=(1, 0.5)
     )
     plt.tight_layout()
     plt.show()
