@@ -56,13 +56,6 @@ A fully connected neural network is trained to minimize the PDE residual using *
 
 ---
 
-## 🏗️ Network Architecture
-- **Input**: $(x, t) \in \mathbb{R}^2$
-- **Hidden Layers**: 4 layers, each with 64 neurons
-- **Activation**: `Tanh`
-- **Output**: Scalar field $u(x, t)$
-
----
 
 ## 🚀 Installation
 
