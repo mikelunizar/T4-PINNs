@@ -3,12 +3,16 @@ import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
+from torch.utils.data import DataLoader
+
 import numpy as np
 
-from src.residuals import residual_loss
-from src.pde_solver import PDESolver
-from src.data_generator import collocation_points_generation, boundary_condition_points, initial_condition_points
-from src.visuals import plot_collocation_setup
+from pinn.src.residuals import residual_loss
+from pinn.src.pde_solver import PDESolver
+from pinn.src.data_generator import collocation_points_generation, boundary_condition_points, initial_condition_points
+from pinn.src.visuals import plot_collocation_setup
+
+
 
 
 # Reproducibility
