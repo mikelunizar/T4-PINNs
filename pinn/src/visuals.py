@@ -124,20 +124,15 @@ def visualize_pde_error_domain(residuals, X, T, coll_points_train, coll_points_v
 
     # Overlay collocation points
     plt.scatter(coll_points_train[:, 0], coll_points_train[:, 1],
-                color='black', s=15, edgecolors='white', label='Train Collocation', alpha=0.7)
+                color='black', s=15, edgecolors='white', label='Train Collocation', alpha=0.65)
     plt.scatter(coll_points_val[:, 0], coll_points_val[:, 1],
-                color='orange', edgecolors='white', s=15, label='Val Collocation', alpha=0.7)
+                color='orange', edgecolors='white', s=15, label='Val Collocation', alpha=0.65)
 
     plt.xlabel('$x$')
     plt.ylabel('$t$')
     plt.legend(
-        handlelength=1.5,
-        handletextpad=0.5,
-        labelspacing=0.3,
         fontsize='medium',
         framealpha=1.0,
-        loc='center left',
-        bbox_to_anchor=(1, 0.5)
     )
     plt.tight_layout()
     plt.show()

@@ -4,7 +4,7 @@ from pytorch_lightning.loggers import WandbLogger
 
 from pinn.src.residuals import residual_loss
 from pinn.src.pde_solver import PDESolver
-from pinn.src.data_generator import collocation_points_generation, boundary_condition_points, initial_condition_points
+from pinn.src.pinn_data_generator import collocation_points_generation, boundary_condition_points, initial_condition_points
 import torch
 import numpy as np
 import pytorch_lightning as pl
