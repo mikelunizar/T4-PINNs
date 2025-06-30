@@ -1,110 +1,104 @@
 import torch
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader, TensorDataset
-from sklearn.model_selection import train_test_split
-import numpy as np
 import matplotlib.pyplot as plt
+from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import ModelCheckpoint
+import numpy as np
 
-from src.loss import mass, k, mu, loss_pinn
-from src.solver import Solver
-
-w_0 = np.sqrt(k/mass)  # ω₀ (angular frequency)
-delta = mu/(2*mass)  # δ (delta), the damping factor
-w = np.sqrt(w_0**2 - delta**2)  # ω damped angular frequency
-
-
-def generate_solution_osc(x):
-    y = np.exp(-mu/(2*mass)*x) * (np.cos(w*x) + mu/(2*mass*w)*np.sin(w*x))
-    return y
+from src.residuals import residual_loss
+from src.pde_solver import PDESolver
+from src.data_generator import collocation_points_generation, boundary_condition_points, initial_condition_points
+from src.visuals import plot_collocation_setup
 
 
-def inference_model_and_performance(model, time, analytical_solution):
-    # Generate high resolution learned solutions
-    test_t_tensor = torch.tensor(time, dtype=torch.float32).reshape(-1, 1)
-    # set model to evaluate
-    model.eval()
-    predicted_solution = model(test_t_tensor).ravel().detach().numpy()
-    # compute MAE error
-    error = np.abs(analytical_solution - predicted_solution)
-    mean_error = np.mean(error)
-    return predicted_solution, mean_error
+# Reproducibility
+np.random.seed(53)
+pl.seed_everything(53)
+
+# Device configuration
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Using device: {device}")
 
 
 if __name__ == '__main__':
 
-    batch_size = 128
+    # PDE Problem Domain
+    Nx, Nt = 300, 200
+    # set grid PDE domain at resolution Nx, Nt
+    x = np.linspace(-1, 1, Nx)
+    t = np.linspace(0, 1, Nt)
+    X, T = np.meshgrid(x, t)
+    xt_grid = np.stack([X.ravel(), T.ravel()], axis=-1)  # shape (N, 2) where N = Nx * Nt
 
-    # Simulate real world scenario by random sampling data
-    range_time_ode = 1
-    num_sampled_t = 25
-    #sampled_t = (np.random.rand(num_sampled_t) * range_time_ode / 2).reshape(-1, 1)
-    collocation_points = np.linspace(0, range_time_ode, num_sampled_t)
-    sampled_u = generate_solution_osc(collocation_points)
+    # Generate collocation points
+    Ncp = 500  # Number of Collocation points
+    coll_points_train, coll_points_val = collocation_points_generation(xt_grid, Ncp, val_ratio=0.2)
 
-    # Split the data train, val (80-20%)
-    train_t, valid_t, train_u, valid_u = train_test_split(collocation_points, sampled_u, test_size=0.2, random_state=52)
+    # Generate boundary condition points (x,t) and solution u(x,t)
+    Nbc = 100  # Number of Boundary condition points
+    xt_bc, u_bc = boundary_condition_points(Nbc, xt_grid)
 
-    # Convert data to PyTorch tensors
-    train_t = torch.tensor(train_t, dtype=torch.float32)
-    train_u = torch.tensor(train_u, dtype=torch.float32)
-    valid_t = torch.tensor(valid_t, dtype=torch.float32)
-    valid_u = torch.tensor(valid_u, dtype=torch.float32)
-    # Create TensorDatasets
-    train_dataset = TensorDataset(train_t, train_u)
-    valid_dataset = TensorDataset(valid_t, valid_u)
-    # Create DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
+    # Generate initial condition points (x,t) and solution u(x,t)
+    Nic = 100  # Number Initial condition points
+    xt_ic, u_ic = initial_condition_points(Nic, xt_grid)
 
-    # Instantiate the model
-    neural_network = torch.nn.Sequential(torch.nn.Linear(1, 32),
-                                        torch.nn.Tanh(),
-                                        torch.nn.Linear(32, 32),
-                                        torch.nn.Tanh(),
-                                        torch.nn.Linear(32, 1))
+    # Plot setup problem
+    plot_collocation_setup(xt_grid, coll_points_train, coll_points_val, xt_bc, u_bc, xt_ic, u_ic)
 
-    # Hyper-parameters
-    epochs = 15000
+    # Model Architecture
+    # input, output and hidden size
+    input_size = 2
+    ouput_size = 1
+    hiden_size = 64
+    # NN model
+    model = torch.nn.Sequential(torch.nn.Linear(input_size, hiden_size),
+                                torch.nn.Tanh(),
+                                torch.nn.Linear(hiden_size, hiden_size),
+                                torch.nn.Tanh(),
+                                torch.nn.Linear(hiden_size, hiden_size),
+                                torch.nn.Tanh(),
+                                torch.nn.Linear(hiden_size, hiden_size),
+                                torch.nn.Tanh(),
+                                torch.nn.Linear(hiden_size, ouput_size))
+
+    # Set up Optimization process
+    # hyperparameters
+    opt = torch.optim.Adam
     lr = 1e-3
-    optm = torch.optim.Adam
-    # Regularization techniques
-    early_stopping = pl.callbacks.EarlyStopping(monitor='val_loss', patience=50, mode='min')
-    # Model setup
-    model = Solver(neural_network, criterion=loss_pinn, lr=lr, optimizer=optm)
+    bs = 128
+    foldername = f'bs={bs}_lr={lr}_Ncp={Ncp}'  # Run name
+
+    # Solver setup
+    pde_solver = PDESolver(model, residual=residual_loss,
+                           xt_bc=xt_bc, u_bc=u_bc, xt_ic=xt_ic, u_ic=u_ic,
+                           lr=lr, optimizer=opt, device='cuda' if torch.cuda.is_available() else 'cpu')
+
+    # Callbacks
+    early_stopping = pl.callbacks.EarlyStopping(monitor='valid_residual', patience=25, mode='min')  # regularization technique
+    checkpoint_callback = ModelCheckpoint( monitor='valid_residual', dirpath=f'checkpoints/{foldername}', filename='best_model', save_top_k=1, mode='min', save_weights_only=True)
+    logger = WandbLogger(name=foldername, project='T4-PINNs')  # W&B logger
+
     # Trainer setup
     trainer = pl.Trainer(accelerator='gpu' if torch.cuda.is_available() else 'cpu',
-                         max_epochs=epochs,
-                         callbacks=[early_stopping], check_val_every_n_epoch=100)
+                         max_epochs=2000,
+                         logger=logger, callbacks=[early_stopping],
+                         check_val_every_n_epoch=10)
+
+    # dataloaders
+    train_loader = DataLoader(torch.tensor(coll_points_train, dtype=torch.float32), batch_size=32, shuffle=True)
+    valid_loader = DataLoader(torch.tensor(coll_points_val, dtype=torch.float32), batch_size=32, shuffle=False)
+
     # Training the model
-    trainer.fit(model, train_loader, valid_loader)
-    # Save the model
-    torch.save(model.state_dict(), './model_pinn.pth')
+    trainer.fit(pde_solver, train_loader, valid_loader)
 
-    # Do inference of trained model
-    # Generate analytical solution
-    analytical_time = np.linspace(0, range_time_ode, 500)  # Creating a tensor of 500 points between 0 and 1
-    analytical_solution = generate_solution_osc(
-        analytical_time)  # Calculating the corresponding y-values using the oscillator function
+    # perform prediction
+    u_grid_hat = model(torch.tensor(xt_grid, dtype=torch.float32)).detach()
 
-    predicted_solution, error = inference_model_and_performance(model, analytical_time, analytical_solution,)
-
-    # Plot the exact solution and training points
-    plt.figure(figsize=(10, 6))
-    plt.scatter(0, 1, color='green', label='Initial Condition')
-    plt.scatter(train_t, len(train_t) * [-0.6], color='green', label='CP train', s=20)
-    plt.scatter(valid_t, len(valid_t) * [-0.6], color='red', label='CP valid', s=20)
-
-    plt.plot(analytical_time, analytical_solution, label='Analylical Solution', color='blue', alpha=0.5)
-    plt.plot(analytical_time, predicted_solution, color='black', label='Learned Model', alpha=0.75)
-
-    plt.fill_between(analytical_time, analytical_solution, predicted_solution, color='red', alpha=0.1,
-                     label=f'Error mae: {round(error, 4)}')
-
-    plt.title('Analytical Solution vs Learned Model PINN')
-    plt.xlabel('t')
-    plt.ylabel('u(t)')
-    plt.legend()
-    plt.grid(True)
-    plt.legend(fontsize=12)
-    plt.tight_layout()
+    # Create a figure with 1 row and 2 columns of subplots
+    fig, (ax1) = plt.subplots(1, 1)
+    # Left subplot - prediction
+    sc1 = ax1.scatter(xt_grid[:, 0:1], xt_grid[:, 1:], c=u_grid_hat, cmap='jet')
+    ax1.set_title(f'Resolution {Nx}x{Nt}')
+    fig.colorbar(sc1, ax=ax1)
     plt.show()
+

@@ -1,74 +1,80 @@
-import torch
-import pytorch_lightning as pl
-from pytorch_lightning.loggers import WandbLogger
-import numpy as np
-from src.utils import ModelSaveTopK
-
-from src.solver import Solver
-from src.loss_burgers import loss_pinn
-from src.dataloader import build_dataloader
-from src.data_generator import collocation_points_generation
 import wandb
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.loggers import WandbLogger
 
-np.random.seed(53)
-pl.seed_everything(53)
+from src.residuals import residual_loss
+from src.pde_solver import PDESolver
+from src.data_generator import collocation_points_generation, boundary_condition_points, initial_condition_points
+import torch
+import numpy as np
+import pytorch_lightning as pl
+from torch.utils.data import DataLoader
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# PDE problem domain setup (same as before)
+Nx, Nt = 300, 200
+x = np.linspace(-1, 1, Nx)
+t = np.linspace(0, 1, Nt)
+X, T = np.meshgrid(x, t)
+xt_grid = np.stack([X.ravel(), T.ravel()], axis=-1)
+
+Ncp = 500
+coll_points_train, coll_points_val = collocation_points_generation(xt_grid, Ncp, val_ratio=0.2)
+Nbc = 100
+xt_bc, u_bc = boundary_condition_points(Nbc, xt_grid)
+Nic = 100
+xt_ic, u_ic = initial_condition_points(Nic, xt_grid)
 
 
 def train(config=None):
-    # Override default hyperparameters with sweep config if provided
-    with wandb.init(config=config):
-        args = wandb.config
 
-    Nx, Nt = 256, 100
-    Nc = 2500
-    epochs = 3000
-    bs = args.bs
-    lr = args.lr
-    with_enc = args.with_enc
-    ratio = args.ratio
-    opt = torch.optim.Adam if args.optimizer == 'adam' else torch.optim.SGD
-    #opt = torch.optim.SGD
+    wandb.init(project="T4-PINNs", config=config)
+    config = wandb.config
 
-    # Run name
-    foldername = f'bs={bs}_lr={lr}_ratio={ratio}_withEnc={with_enc}_opt={"adam"}'
+    # Model architecture - using config.hidden_size
+    model = torch.nn.Sequential(
+        torch.nn.Linear(2, config.hidden_size),
+        torch.nn.Tanh(),
+        torch.nn.Linear(config.hidden_size, config.hidden_size),
+        torch.nn.Tanh(),
+        torch.nn.Linear(config.hidden_size, config.hidden_size),
+        torch.nn.Tanh(),
+        torch.nn.Linear(config.hidden_size, 1),
+    )
 
-    # Data generation
-    train_data, valid_data, points, ic, bc = collocation_points_generation(Nx, Nt, Nc, ratio)
-    # Build loaders
-    train_loader = build_dataloader(train_data[0], train_data[1], batch_size=bs)
-    valid_loader = build_dataloader(valid_data[0], valid_data[1], batch_size=bs)
-    # Instantiate the model
-    neural_network = torch.nn.Sequential(torch.nn.Linear(22 if with_enc else 2, 50),
-                                         torch.nn.Tanh(),
-                                         torch.nn.Linear(50, 50),
-                                         torch.nn.Tanh(),
-                                         torch.nn.Linear(50, 50),
-                                         torch.nn.Tanh(),
-                                         torch.nn.Linear(50, 1))
+    # PDE solver setup
+    pde_solver = PDESolver(model, residual=residual_loss,
+                           xt_bc=xt_bc, u_bc=u_bc,
+                           xt_ic=xt_ic, u_ic=u_ic,
+                           lr=config.lr, optimizer=torch.optim.Adam,
+                           device='cuda' if torch.cuda.is_available() else 'cpu')
 
-    # Best saved model
-    save_topk = ModelSaveTopK(dirpath=str(f'outputs/{foldername}'), monitor='val_loss', mode='min', topk=1)
-    # Model setup
-    model = Solver(neural_network, criterion=loss_pinn,
-                   X_bc=bc[0], u_bc=bc[1], X_ic=ic[0], u_ic=ic[1], points=points,
-                   lr=lr, optimizer=opt, with_enc=with_enc, device=device)
-    # Trainer setup
+    # Callbacks
+    early_stopping = EarlyStopping(monitor='valid_residual', patience=config.patience, mode='min')
+    checkpoint_callback = ModelCheckpoint(
+        monitor='valid_residual',
+        dirpath=f'checkpoints/bs={config.batch_size}_lr={config.lr}_hs={config.hidden_size}',
+        filename='best_model',
+        save_top_k=1,
+        mode='min',
+        save_weights_only=True)
+
+    logger = WandbLogger(project="T4-PINNs", name=f"bs={config.batch_size}_lr={config.lr}_hs={config.hidden_size}")
+
+    # Trainer
     trainer = pl.Trainer(accelerator='gpu' if torch.cuda.is_available() else 'cpu',
-                         max_epochs=epochs, logger=WandbLogger(name=foldername, project='T4-PINNs'),
-                         callbacks=[save_topk], check_val_every_n_epoch=25)
-    # Training the model
-    trainer.fit(model, train_loader, valid_loader)
+                         max_epochs=config.max_epochs,
+                         logger=logger,
+                         callbacks=[early_stopping, checkpoint_callback],
+                         check_val_every_n_epoch=10)
 
-    # Load best model and Evaluate
-    model.load_state_dict(torch.load(f'outputs/{foldername}/topk1.pth', weights_only=True))
-    # evaluate model with target
-    target_high_res = np.load('./data/burgers_sol.npy', allow_pickle=True)[-1]
-    test_loader = build_dataloader(points, target_high_res, batch_size=len(target_high_res), shuffle=False)
-    trainer.test(model, dataloaders=test_loader)
+    # DataLoaders with batch size from config
+    train_loader = DataLoader(torch.tensor(coll_points_train, dtype=torch.float32), batch_size=config.batch_size, shuffle=True)
+    valid_loader = DataLoader(torch.tensor(coll_points_val, dtype=torch.float32), batch_size=config.batch_size, shuffle=False)
+
+    trainer.fit(pde_solver, train_loader, valid_loader)
+    wandb.finish()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     train()
-
