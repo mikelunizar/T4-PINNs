@@ -1,0 +1,19 @@
+# run.sub -- simple run job
+
+
+
+executable              = executables/run.sh
+
+log                     = executables/run.log
+
+output                  = executables/outfile.txt
+
+error                   = executables/errors.txt
+
+
+
++Architecture="GPU3090"
+
+
+
+queue 1
