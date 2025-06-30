@@ -8,10 +8,10 @@ from torch.utils.data import DataLoader
 import numpy as np
 
 from pinn.src.residuals import residual_loss
-from pinn.src.pde_solver import PDESolver
-from pinn.src.data_generator import collocation_points_generation, boundary_condition_points, initial_condition_points
+from pinn.src.pinn_data_generator import collocation_points_generation, boundary_condition_points, initial_condition_points
 from pinn.src.visuals import plot_collocation_setup
 
+from pinn.src.pde_solver import PDESolver
 
 
 
