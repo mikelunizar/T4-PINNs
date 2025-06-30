@@ -2,9 +2,9 @@ import wandb
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
-from src.residuals import residual_loss
-from src.pde_solver import PDESolver
-from src.data_generator import collocation_points_generation, boundary_condition_points, initial_condition_points
+from pinn.residuals import residual_loss
+from pinn.pde_solver import PDESolver
+from pinn.data_generator import collocation_points_generation, boundary_condition_points, initial_condition_points
 import torch
 import numpy as np
 import pytorch_lightning as pl
