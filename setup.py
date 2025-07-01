@@ -20,7 +20,10 @@ setup(
         'matplotlib',
         'scikit-learn',
         'imageio',
-        'jupyter'
+        'jupyter',
+        'torchvision',
+        'tkinter',
+        'PIL',
     ],
     classifiers=[
         'Programming Language :: Python :: 3',
