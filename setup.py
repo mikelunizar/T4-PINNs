@@ -22,7 +22,6 @@ setup(
         'imageio',
         'jupyter',
         'torchvision',
-        'tkinter',
         'PIL',
     ],
     classifiers=[
