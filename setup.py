@@ -22,7 +22,6 @@ setup(
         'imageio',
         'jupyter',
         'torchvision',
-        'PIL',
     ],
     classifiers=[
         'Programming Language :: Python :: 3',
