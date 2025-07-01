@@ -22,6 +22,7 @@ setup(
         'imageio',
         'jupyter',
         'torchvision',
+        'plotly'
     ],
     classifiers=[
         'Programming Language :: Python :: 3',
